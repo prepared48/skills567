@@ -151,6 +151,7 @@ import json
 import urllib.request
 import urllib.error
 import time
+import re
 
 # Configuration
 API_KEY = os.environ.get("DASHSCOPE_API_KEY")
@@ -166,11 +167,13 @@ if not API_KEY:
 
 if not API_KEY:
     print("Error: DASHSCOPE_API_KEY not found.")
-    exit(1)
+    # We don't exit here if we just want to run logic that doesn't require API key, 
+    # but this script's main purpose is generation.
+    # exit(1) 
 
 API_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis"
 
-def generate_image(prompt, filename):
+def generate_image_and_return_url(prompt, filename):
     print(f"Generating image for: {prompt[:30]}...")
     
     headers = {
@@ -199,7 +202,7 @@ def generate_image(prompt, filename):
             
         if 'output' not in result or 'task_id' not in result['output']:
              print(f"Error submitting task: {result}")
-             return
+             return None
 
         task_id = result['output']['task_id']
         print(f"Task submitted. ID: {task_id}")
@@ -219,10 +222,10 @@ def generate_image(prompt, filename):
                 print(f"Image generated: {img_url}")
                 urllib.request.urlretrieve(img_url, filename)
                 print(f"Saved to {filename}")
-                break
+                return img_url
             elif task_status in ['FAILED', 'CANCELED']:
                 print(f"Task failed: {task_result}")
-                break
+                return None
             else:
                 print(f"Status: {task_status}...")
                 
@@ -230,6 +233,11 @@ def generate_image(prompt, filename):
         print(f"HTTP Error: {e.code} - {e.read().decode('utf-8')}")
     except Exception as e:
         print(f"Error: {e}")
+    
+    return None
+
+def normalize_text(text):
+    return re.sub(r'\s+', ' ', text).strip()
 
 def main():
     if not os.path.exists("article_data.json"):
@@ -242,15 +250,56 @@ def main():
     if not os.path.exists("images"):
         os.makedirs("images")
     
+    # Map prompt to URL
+    prompt_to_url = {}
+
     # Generate Cover
+    cover_url = None
     if "new_cover_img_prompt" in data:
-        generate_image(data["new_cover_img_prompt"], "images/cover.png")
+        prompt = data["new_cover_img_prompt"]
+        cover_url = generate_image_and_return_url(prompt, "images/cover.png")
+        if cover_url:
+            prompt_to_url[normalize_text(prompt)] = cover_url
         time.sleep(2)
     
     # Generate Content Images
+    content_urls = []
     for i, prompt in enumerate(data.get("new_img_prompt", [])):
-        generate_image(prompt, f"images/content_{i+1}.png")
+        url = generate_image_and_return_url(prompt, f"images/content_{i+1}.png")
+        if url:
+            content_urls.append(url)
+            prompt_to_url[normalize_text(prompt)] = url
         time.sleep(2)
+
+    # Update Data with URLs and Final Content
+    data["image_urls"] = {
+        "cover": cover_url,
+        "content": content_urls
+    }
+
+    # Replace placeholders in content
+    content = data.get("new_content", "")
+    
+    def replace_match(match):
+        placeholder_text = match.group(1)
+        normalized_key = normalize_text(placeholder_text)
+        
+        if normalized_key in prompt_to_url:
+            return f"![Image]({prompt_to_url[normalized_key]})"
+        else:
+            # Fallback: try to find partial match or leave it?
+            # Let's leave it for manual inspection if not found, or maybe use a default placeholder
+            print(f"Warning: No URL found for prompt: {normalized_key[:30]}...")
+            return match.group(0)
+            
+    final_content = re.sub(r"《(.*?)》", replace_match, content, flags=re.DOTALL)
+    data["final_content"] = final_content
+    data["new_content"] = final_content
+
+    with open("article_data.json", "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    
+    print("article_data.json updated with image URLs and final content.")
 
 if __name__ == "__main__":
     main()
