@@ -126,43 +126,31 @@ The `new_content` is in Markdown. Convert it to HTML suitable for WeChat (inline
 
 ## Step 3: Image Handling
 
-**Decision Point:** Ask the user or check instructions: **Generate New Images** or **Reuse Existing Images**?
+**Default:** Use local images and upload to CDN.
 
-
-### Plan A: Reuse Existing Images (Default)
-*Trigger: User says "use existing images", "skip generation", or "save quota".*
+### Plan A: Use Local Images & Upload to CDN (Default)
+*Trigger: Default behavior unless user explicitly requests image generation.*
 
 1.  **Do NOT run the generation script.**
 2.  Check the `images/` directory.
-3.  Assign `images/cover.png` as the cover.
-4.  Assign `images/content_*.png` to the content paragraphs in order.
-5.  If files are missing, notify the user or fallback to Plan B.
+    *   Ensure `images/cover.png` exists.
+    *   Ensure `images/content_*.png` exist.
+3.  **Run the script**: `python scripts/upload_images.py`
+    *   This uploads the local images to SCDN and updates `article_data.json` with public URLs.
+4.  If files are missing in `images/`, notify the user to provide them or ask if they want to switch to Plan B (Generation).
 
 ### Plan B: Generate New Images
-*Trigger: User wants new images, or silent default.*
+*Trigger: User explicitly asks to generate images.*
 
 1.  Check for `DASHSCOPE_API_KEY`. If missing, ask the user.
 2.  **Run the script**: `python scripts/generate_images.py`
-
-*(The script handles `qwen-image-max` with `wanx-v1` fallback, async polling, and rate limiting)*
-
-
-
-## Step 4: Upload Images to CDN (Optional)
-
-This step uploads the local images (generated or existing) to a CDN (e.g., SCDN) to get permanent public URLs, and updates `article_data.json`.
-
-**Trigger:** User wants to upload images, use CDN, or prepare for publishing with public links.
-
-1.  **Run the script**: `python scripts/upload_images.py`
-
-*(This script finds `images/` directory and uploads images to SCDN)*
+    *(The script handles `qwen-image-max` with `wanx-v1` fallback, async polling, and rate limiting)*
+3.  **Run the script**: `python scripts/upload_images.py` to upload the generated images to CDN.
 
 
+## Step 4: Publish to WeChat (Automatic)
 
-## Step 5: Publish to WeChat (Optional)
-
-If `LIMYAI_API_KEY` and `WX_APPID` are available, you can automatically publish the article to the WeChat Official Account draft box.
+If `LIMYAI_API_KEY` and `WX_APPID` are available, automatically publish the article to the WeChat Official Account draft box.
 
 **Execution:**
 1.  Check for `LIMYAI_API_KEY` and `WX_APPID` in environment or `.env`.
@@ -177,7 +165,7 @@ Generate standalone Markdown and HTML files for easy previewing and archiving.
 2.  **Output**: Two files are created in the current directory, named with the format `YYYY-MM-DD_Title.md` and `YYYY-MM-DD_Title.html`.
 
 
-## Step 7: Final Output
+## Step 6: Final Output
 
 Present the user with:
 1.  The Title.
