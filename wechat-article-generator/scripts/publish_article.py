@@ -43,7 +43,8 @@ def publish_article():
         data = json.load(f)
 
     title = data.get("new_title", "Untitled")
-    content = data.get("new_content", "")
+    # Use final_content (with injected images) if available, otherwise fallback to new_content
+    content = data.get("final_content", data.get("new_content", ""))
     
     # Simple summary extraction (first 100 chars)
     summary = content[:100].replace("#", "").strip() + "..."
